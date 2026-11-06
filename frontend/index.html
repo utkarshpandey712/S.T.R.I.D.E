@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>S.T.R.I.D.E - Smart Transit Real-time Infrastructure & Defect Evaluator</title>
+    <meta name="description" content="AI-Powered Mobile Urban Sensing Platform for Public Transport Fleets">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@500;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    
+    <!-- Leaflet GIS CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="stride-dark-theme">
+    <!-- Top Global Notification Banner (Emergency Alarms) -->
+    <div id="emergency-alert-banner" class="emergency-banner hidden">
+        <div class="emergency-content">
+            <span class="emergency-pulse"><i class="fa-solid fa-triangle-exclamation"></i></span>
+            <div class="emergency-text">
+                <strong id="emergency-title">CRITICAL INCIDENT DETECTED</strong>
+                <span id="emergency-desc">Hit-and-Run incident captured by STRIDE-BUS-02. Offender Plate: DL-3C-CN-9428</span>
+            </div>
+            <div class="emergency-actions">
+                <button class="btn btn-emergency" onclick="app.viewIncidentDetailFromBanner()">Inspect ANPR Evidence</button>
+                <button class="btn btn-dismiss" onclick="app.dismissEmergencyBanner()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application Header -->
+    <header class="stride-header">
+        <div class="header-left">
+            <div class="logo-group">
+                <div class="logo-icon">
+                    <i class="fa-solid fa-satellite-dish pulse-glow"></i>
+                </div>
+                <div class="logo-text">
+                    <div class="brand-title">S.T.R.I.D.E <span class="badge-ai">EDGE-AI 2.0</span></div>
+                    <div class="brand-subtitle">Smart Transit Real-time Infrastructure & Defect Evaluator</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Global Fleet KPI Badges -->
+        <div class="header-stats">
+            <div class="stat-pill">
+                <span class="stat-dot dot-live"></span>
+                <div class="stat-info">
+                    <span class="stat-label">ACTIVE FLEET</span>
+                    <span class="stat-value" id="kpi-buses-active">7 Buses</span>
+                </div>
+            </div>
+            <div class="stat-pill">
+                <i class="fa-solid fa-camera-viewfinder stat-icon"></i>
+                <div class="stat-info">
+                    <span class="stat-label">AI CAMERAS</span>
+                    <span class="stat-value" id="kpi-cameras">28 Streams</span>
+                </div>
+            </div>
+            <div class="stat-pill">
+                <i class="fa-solid fa-road-circle-exclamation stat-icon stat-warning"></i>
+                <div class="stat-info">
+                    <span class="stat-label">DEFECTS LOGGED</span>
+                    <span class="stat-value text-amber" id="kpi-defects-count">5 Active</span>
+                </div>
+            </div>
+            <div class="stat-pill">
+                <i class="fa-solid fa-shield-halved stat-icon stat-danger"></i>
+                <div class="stat-info">
+                    <span class="stat-label">INCIDENTS</span>
+                    <span class="stat-value text-red" id="kpi-incidents-count">2 Alerts</span>
+                </div>
+            </div>
+            <div class="stat-pill">
+                <i class="fa-solid fa-gauge-high stat-icon stat-success"></i>
+                <div class="stat-info">
+                    <span class="stat-label">CITY RQI</span>
+                    <span class="stat-value text-emerald" id="kpi-rqi-score">78.0 / 100</span>
+                </div>
+            </div>
+            <div class="stat-pill highlight-edge">
+                <i class="fa-solid fa-microchip stat-icon"></i>
+                <div class="stat-info">
+                    <span class="stat-label">BANDWIDTH SAVED</span>
+                    <span class="stat-value text-cyan">98.6%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <div class="system-time" id="system-live-clock">22:00:00 UTC+05:30</div>
+            <div class="connection-status" id="ws-status-badge" title="WebSocket Live Telemetry Feed">
+                <span class="conn-dot"></span> LIVE SYNC
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Navigation Bar -->
+    <nav class="stride-nav">
+        <div class="nav-tabs">
+            <button class="nav-tab active" data-tab="tab-map">
+                <i class="fa-solid fa-map-location-dot"></i> GIS Fleet & Defect Map
+            </button>
+            <button class="nav-tab" data-tab="tab-hud">
+                <i class="fa-solid fa-video"></i> Live Bus Edge-AI HUD
+            </button>
+            <button class="nav-tab" data-tab="tab-maintenance">
+                <i class="fa-solid fa-screwdriver-wrench"></i> Road Maintenance & Work Orders
+                <span class="tab-badge" id="badge-wo-count">2</span>
+            </button>
+            <button class="nav-tab" data-tab="tab-traffic">
+                <i class="fa-solid fa-chart-line"></i> Traffic Flow & O-D Analytics
+            </button>
+            <button class="nav-tab" data-tab="tab-incidents">
+                <i class="fa-solid fa-car-burst"></i> ANPR & Emergency Locker
+                <span class="tab-badge badge-red" id="badge-inc-count">2</span>
+            </button>
+            <button class="nav-tab" data-tab="tab-scorecard">
+                <i class="fa-solid fa-chart-pie"></i> Municipal RQI Scorecard
+            </button>
+        </div>
+
+        <!-- Quick Event Simulator Button in Nav -->
+        <div class="nav-quick-actions">
+            <button class="btn btn-sm btn-gradient" onclick="app.openSimulationModal()">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Inject Edge Event
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="stride-main">
+
+        <!-- ================= TAB 1: GIS FLEET & DEFECT MAP ================= -->
+        <section id="tab-map" class="tab-content active">
+            <div class="map-view-layout">
+                <!-- Interactive Leaflet Map Container -->
+                <div class="map-container-wrapper">
+                    <div id="gis-map" class="leaflet-stride-map"></div>
+                    
+                    <!-- Floating Map Overlay Controls -->
+                    <div class="map-floating-controls">
+                        <div class="control-card">
+                            <div class="control-title"><i class="fa-solid fa-layer-group"></i> GIS Layer Filters</div>
+                            <label class="layer-toggle">
+                                <input type="checkbox" id="layer-toggle-buses" checked onchange="app.toggleMapLayer('buses')">
+                                <span class="layer-indicator color-buses"></span> Active Bus Fleet
+                            </label>
+                            <label class="layer-toggle">
+                                <input type="checkbox" id="layer-toggle-defects" checked onchange="app.toggleMapLayer('defects')">
+                                <span class="layer-indicator color-defects"></span> Road Defects & Potholes
+                            </label>
+                            <label class="layer-toggle">
+                                <input type="checkbox" id="layer-toggle-incidents" checked onchange="app.toggleMapLayer('incidents')">
+                                <span class="layer-indicator color-incidents"></span> Hit-and-Run / Incidents
+                            </label>
+                            <label class="layer-toggle">
+                                <input type="checkbox" id="layer-toggle-routes" checked onchange="app.toggleMapLayer('routes')">
+                                <span class="layer-indicator color-routes"></span> Transit Corridors
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Map Legend -->
+                    <div class="map-legend">
+                        <div class="legend-item"><span class="legend-icon icon-pothole"></span> Pothole / Crater</div>
+                        <div class="legend-item"><span class="legend-icon icon-divider"></span> Missing Divider</div>
+                        <div class="legend-item"><span class="legend-icon icon-water"></span> Waterlogging</div>
+                        <div class="legend-item"><span class="legend-icon icon-crossing"></span> Faded Zebra Crossing</div>
+                        <div class="legend-item"><span class="legend-icon icon-incident"></span> Offender ANPR Alert</div>
+                    </div>
+                </div>
+
+                <!-- Right Sidebar: Live Fleet & Defect Feed -->
+                <aside class="map-sidebar">
+                    <div class="sidebar-section">
+                        <div class="section-header">
+                            <h3><i class="fa-solid fa-bus"></i> Live Transit Fleet (<span id="fleet-sidebar-count">7</span>)</h3>
+                            <button class="btn btn-xs btn-outline" onclick="app.centerMapOnCity()"><i class="fa-solid fa-crosshairs"></i> Reset View</button>
+                        </div>
+                        <div class="bus-list-scrollable" id="sidebar-bus-list">
+                            <!-- Populated dynamically via JS -->
+                        </div>
+                    </div>
+
+                    <div class="sidebar-section">
+                        <div class="section-header">
+                            <h3><i class="fa-solid fa-bell"></i> Live Edge Detection Stream</h3>
+                            <span class="badge-live-stream">REAL-TIME</span>
+                        </div>
+                        <div class="detection-feed-scrollable" id="sidebar-detection-feed">
+                            <!-- Stream of recent edge events -->
+                        </div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <!-- ================= TAB 2: LIVE BUS EDGE-AI HUD ================= -->
+        <section id="tab-hud" class="tab-content">
+            <div class="hud-view-layout">
+                <!-- Bus Selection & Camera Controls -->
+                <div class="hud-top-bar">
+                    <div class="bus-selector-group">
+                        <label for="hud-bus-select"><i class="fa-solid fa-bus"></i> Selected Vehicle:</label>
+                        <select id="hud-bus-select" class="stride-select" onchange="app.onHudBusChanged(this.value)">
+                            <!-- Populated dynamically -->
+                        </select>
+                    </div>
+
+                    <div class="hud-telemetry-strip" id="hud-selected-bus-telemetry">
+                        <div class="hud-tele-item"><span class="lbl">ROUTE</span> <strong id="hud-route-name">RT-101 (Connaught Ring)</strong></div>
+                        <div class="hud-tele-item"><span class="lbl">SPEED</span> <strong id="hud-speed-val" class="mono text-cyan">42.4 km/h</strong></div>
+                        <div class="hud-tele-item"><span class="lbl">DRIVER</span> <strong id="hud-driver-name">Rajesh Kumar</strong></div>
+                        <div class="hud-tele-item"><span class="lbl">OCCUPANCY</span> <strong id="hud-passengers">32 Pax</strong></div>
+                        <div class="hud-tele-item"><span class="lbl">EDGE FPS</span> <strong id="hud-fps" class="mono text-emerald">32.8 FPS</strong></div>
+                        <div class="hud-tele-item"><span class="lbl">BANDWIDTH</span> <strong id="hud-bandwidth" class="mono text-cyan">4.1 KB/s</strong></div>
+                    </div>
+
+                    <div class="hud-actions">
+                        <button class="btn btn-sm btn-primary" onclick="app.toggleBBoxes()">
+                            <i class="fa-solid fa-vector-square"></i> <span id="btn-bbox-label">Toggle AI Bounding Boxes</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 4-Camera Video Grid -->
+                <div class="camera-quad-grid">
+                    <!-- Front 4K Road Camera -->
+                    <div class="camera-card">
+                        <div class="camera-card-header">
+                            <div class="cam-title"><i class="fa-solid fa-video"></i> CAM 1: FRONT 4K (Road Surface & Ahead Traffic)</div>
+                            <div class="cam-badges">
+                                <span class="badge-cam-status">AI ACTIVE</span>
+                                <span class="badge-cam-res">3840x2160 @ 30fps</span>
+                            </div>
+                        </div>
+                        <div class="camera-canvas-wrapper">
+                            <canvas id="canvas-cam-front" width="640" height="360" class="camera-canvas"></canvas>
+                            <div class="canvas-hud-overlay" id="overlay-cam-front">
+                                <div class="hud-overlay-top">MODEL: YOLO-v11-EDGE-ROAD | INFERENCE: 26.2ms</div>
+                                <div class="hud-overlay-bottom" id="hud-front-detections-text">Detections: 3 Vehicles, 0 Hazards</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Rear 1080P Camera -->
+                    <div class="camera-card">
+                        <div class="camera-card-header">
+                            <div class="cam-title"><i class="fa-solid fa-video"></i> CAM 2: REAR 1080P (Following Traffic & Tailgating)</div>
+                            <div class="cam-badges">
+                                <span class="badge-cam-status">AI ACTIVE</span>
+                                <span class="badge-cam-res">1920x1080 @ 30fps</span>
+                            </div>
+                        </div>
+                        <div class="camera-canvas-wrapper">
+                            <canvas id="canvas-cam-rear" width="640" height="360" class="camera-canvas"></canvas>
+                            <div class="canvas-hud-overlay">
+                                <div class="hud-overlay-top">MODEL: ANPR-OFFENDER-LPR | INFERENCE: 24.1ms</div>
+                                <div class="hud-overlay-bottom">Tailgating Distance: 14.5m (Safe)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Left Kerbside Sidewalk Camera -->
+                    <div class="camera-card">
+                        <div class="camera-card-header">
+                            <div class="cam-title"><i class="fa-solid fa-video"></i> CAM 3: LEFT KERBSIDE (Sidewalk, Bus Stop, Pedestrians)</div>
+                            <div class="cam-badges">
+                                <span class="badge-cam-status">AI ACTIVE</span>
+                                <span class="badge-cam-res">1920x1080 @ 25fps</span>
+                            </div>
+                        </div>
+                        <div class="camera-canvas-wrapper">
+                            <canvas id="canvas-cam-left" width="640" height="360" class="camera-canvas"></canvas>
+                            <div class="canvas-hud-overlay">
+                                <div class="hud-overlay-top">MODEL: PEDESTRIAN-VULNERABILITY-NET</div>
+                                <div class="hud-overlay-bottom">Zone: Sidewalk Passenger Shelter</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Kerbside Median Camera -->
+                    <div class="camera-card">
+                        <div class="camera-card-header">
+                            <div class="cam-title"><i class="fa-solid fa-video"></i> CAM 4: RIGHT KERBSIDE (Road Dividers, Oncoming Traffic)</div>
+                            <div class="cam-badges">
+                                <span class="badge-cam-status">AI ACTIVE</span>
+                                <span class="badge-cam-res">1920x1080 @ 25fps</span>
+                            </div>
+                        </div>
+                        <div class="camera-canvas-wrapper">
+                            <canvas id="canvas-cam-right" width="640" height="360" class="camera-canvas"></canvas>
+                            <div class="canvas-hud-overlay">
+                                <div class="hud-overlay-top">MODEL: INFRA-MEDIAN-CLASSIFIER</div>
+                                <div class="hud-overlay-bottom">Median Barrier Status: Intact</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Onboard Edge Synthetic Event Generator Panel -->
+                <div class="hud-simulation-control-card">
+                    <div class="sim-control-title">
+                        <i class="fa-solid fa-flask-vial"></i> <strong>Interactive Edge Event Injector (Live Onboard Testing)</strong>
+                        <span class="sim-hint">Simulate real-time road situations on selected bus to verify instant AI detection & edge-to-cloud dispatch</span>
+                    </div>
+                    <div class="sim-buttons-grid">
+                        <button class="btn btn-sim btn-sim-pothole" onclick="app.triggerSyntheticEvent('defect', 'pothole', 'Severe')">
+                            <i class="fa-solid fa-road-circle-exclamation"></i>
+                            <div class="sim-btn-text">
+                                <strong>Inject Pothole Crater</strong>
+                                <span>Front 4K Road Surface Detection</span>
+                            </div>
+                        </button>
+                        <button class="btn btn-sim btn-sim-divider" onclick="app.triggerSyntheticEvent('defect', 'missing_divider', 'Critical')">
+                            <i class="fa-solid fa-road-barrier"></i>
+                            <div class="sim-btn-text">
+                                <strong>Inject Broken Divider</strong>
+                                <span>Right Camera Median Assessment</span>
+                            </div>
+                        </button>
+                        <button class="btn btn-sim btn-sim-zebra" onclick="app.triggerSyntheticEvent('defect', 'missing_zebra_crossing', 'High')">
+                            <i class="fa-solid fa-person-walking"></i>
+                            <div class="sim-btn-text">
+                                <strong>Faded Zebra Crossing</strong>
+                                <span>Pedestrian Safety Infrastructure</span>
+                            </div>
+                        </button>
+                        <button class="btn btn-sim btn-sim-water" onclick="app.triggerSyntheticEvent('waterlogging', 'waterlogging', 'Critical')">
+                            <i class="fa-solid fa-water"></i>
+                            <div class="sim-btn-text">
+                                <strong>Severe Waterlogging</strong>
+                                <span>Underpass Flood Hazard</span>
+                            </div>
+                        </button>
+                        <button class="btn btn-sim btn-sim-school" onclick="app.triggerSyntheticEvent('pedestrian', 'School Children Crossing Zone', 'Critical')">
+                            <i class="fa-solid fa-children"></i>
+                            <div class="sim-btn-text">
+                                <strong>School Zone Children</strong>
+                                <span>Vulnerable Pedestrian Alert</span>
+                            </div>
+                        </button>
+                        <button class="btn btn-sim btn-sim-incident" onclick="app.triggerSyntheticEvent('incident', 'Hit-and-Run Collision & Speeding Offender', 'Critical')">
+                            <i class="fa-solid fa-car-burst"></i>
+                            <div class="sim-btn-text">
+                                <strong>Hit-and-Run Incident</strong>
+                                <span>ANPR + Trajectory Offender Lock</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 3: ROAD MAINTENANCE & WORK ORDERS ================= -->
+        <section id="tab-maintenance" class="tab-content">
+            <div class="maintenance-layout">
+                <div class="page-header-row">
+                    <div>
+                        <h2><i class="fa-solid fa-screwdriver-wrench"></i> Municipal Road Defect & Work-Order Lifecycle</h2>
+                        <p class="subtitle">AI-detected infrastructure faults verified and dispatched directly to Public Works (PWD / Municipal Corporation)</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" onclick="app.loadDefectsAndWorkOrders()"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                    </div>
+                </div>
+
+                <!-- Defects & Work Orders Tabs / Filter Bar -->
+                <div class="filter-toolbar">
+                    <div class="filter-group">
+                        <label>Filter by Defect Type:</label>
+                        <select id="defect-type-filter" class="stride-select-sm" onchange="app.filterDefectsTable()">
+                            <option value="ALL">All Defect Types</option>
+                            <option value="pothole">Potholes & Depressions</option>
+                            <option value="missing_divider">Missing / Broken Dividers</option>
+                            <option value="missing_zebra_crossing">Faded Zebra Crossings</option>
+                            <option value="waterlogging">Waterlogging & Floods</option>
+                            <option value="damaged_traffic_sign">Damaged Signboards</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Status:</label>
+                        <select id="defect-status-filter" class="stride-select-sm" onchange="app.filterDefectsTable()">
+                            <option value="ALL">All Statuses</option>
+                            <option value="Detected">Detected (AI New)</option>
+                            <option value="Verified">Verified (Human Audited)</option>
+                            <option value="Work Order Assigned">Work Order Assigned</option>
+                            <option value="Repaired">Repaired</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Dual View: Defect Catalog & Active Work Orders -->
+                <div class="maintenance-grid">
+                    <!-- Left: Defect Catalog -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-road-circle-exclamation"></i> Road Defects Repository</h3>
+                            <span class="badge-count" id="defects-total-badge">5 Items</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="stride-table" id="defects-table">
+                                <thead>
+                                    <tr>
+                                        <th>Defect ID</th>
+                                        <th>Visual Snapshot</th>
+                                        <th>Type & Severity</th>
+                                        <th>Location & Road</th>
+                                        <th>AI Confidence</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="defects-table-body">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Right: Work Orders Dispatch Kanban/List -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-clipboard-list"></i> Active PWD Work Orders</h3>
+                            <span class="badge-count badge-cyan" id="workorders-total-badge">2 Active</span>
+                        </div>
+                        <div class="work-orders-list" id="work-orders-container">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 4: TRAFFIC FLOW & O-D ANALYTICS ================= -->
+        <section id="tab-traffic" class="tab-content">
+            <div class="traffic-analytics-layout">
+                <div class="page-header-row">
+                    <div>
+                        <h2><i class="fa-solid fa-chart-line"></i> City Traffic Density & Origin-Destination (O-D) Analytics</h2>
+                        <p class="subtitle">Real-time vehicle classification, density estimation, bottleneck roots, and zone-to-zone transit delay predictions</p>
+                    </div>
+                </div>
+
+                <!-- Top Metric Cards -->
+                <div class="analytics-metrics-row">
+                    <div class="metric-card">
+                        <div class="metric-icon color-cyan"><i class="fa-solid fa-car"></i></div>
+                        <div class="metric-body">
+                            <span class="metric-label">HOURLY VEHICLE FLOW</span>
+                            <span class="metric-val mono">7,120</span>
+                            <span class="metric-sub">Peak Evening Commute</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon color-amber"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        <div class="metric-body">
+                            <span class="metric-label">ACTIVE BOTTLENECKS</span>
+                            <span class="metric-val mono text-amber">3 Identified</span>
+                            <span class="metric-sub">Primary cause: Road defects</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon color-red"><i class="fa-solid fa-clock-rotate-left"></i></div>
+                        <div class="metric-body">
+                            <span class="metric-label">MAX ROUTE DELAY</span>
+                            <span class="metric-val mono text-red">+22.0 min</span>
+                            <span class="metric-sub">Vikas Marg Underpass</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-icon color-emerald"><i class="fa-solid fa-bus-simple"></i></div>
+                        <div class="metric-body">
+                            <span class="metric-label">FLEET SENSING COVERAGE</span>
+                            <span class="metric-val mono text-emerald">753.1 km</span>
+                            <span class="metric-sub">87.4% Major Arterials Scanned</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts & Matrices Grid -->
+                <div class="analytics-grid">
+                    <!-- Traffic Density Hourly Trend Chart -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-chart-area"></i> 24-Hour Traffic Volume & Average Velocity Curve</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-traffic-hourly" height="240"></canvas>
+                        </div>
+                    </div>
+
+                    <!-- Vehicle Classification Distribution -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-chart-pie"></i> Fleet Vehicle Classification Breakdown</h3>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="chart-vehicle-breakdown" height="240"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Origin-Destination Transit Matrix & Bottleneck Table -->
+                <div class="analytics-grid-secondary">
+                    <!-- O-D Flow Matrix -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-diagram-project"></i> Origin-Destination (O-D) Commute Flow Matrix</h3>
+                            <span class="hint-text">Zone-to-Zone volume & congestion index</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="stride-table matrix-table" id="od-matrix-table">
+                                <thead>
+                                    <tr>
+                                        <th>Origin Zone</th>
+                                        <th>Destination Zone</th>
+                                        <th>Hourly Flow Volume</th>
+                                        <th>Estimated Delay</th>
+                                        <th>Congestion Level</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="od-matrix-tbody">
+                                    <!-- Populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Active Bottleneck Causes -->
+                    <div class="panel-card">
+                        <div class="panel-header">
+                            <h3><i class="fa-solid fa-traffic-light"></i> Bottleneck Root-Cause Diagnostics</h3>
+                        </div>
+                        <div class="bottleneck-list" id="bottleneck-container">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 5: ANPR & EMERGENCY INCIDENT LOCKER ================= -->
+        <section id="tab-incidents" class="tab-content">
+            <div class="incidents-layout">
+                <div class="page-header-row">
+                    <div>
+                        <h2><i class="fa-solid fa-car-burst"></i> Emergency Law Enforcement & ANPR Evidence Locker</h2>
+                        <p class="subtitle">Automated offender vehicle detection, License Plate Recognition (ANPR), trajectory vectors, and Police FIR integration</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-outline" onclick="app.loadIncidents()"><i class="fa-solid fa-rotate"></i> Refresh Feed</button>
+                    </div>
+                </div>
+
+                <!-- Incidents Feed & Evidence Dossier Grid -->
+                <div class="incidents-grid" id="incidents-container">
+                    <!-- Populated dynamically -->
+                </div>
+            </div>
+        </section>
+
+        <!-- ================= TAB 6: MUNICIPAL RQI SCORECARD ================= -->
+        <section id="tab-scorecard" class="tab-content">
+            <div class="scorecard-layout">
+                <div class="page-header-row">
+                    <div>
+                        <h2><i class="fa-solid fa-chart-pie"></i> Municipal Zone Road Quality Index (RQI) Scorecard</h2>
+                        <p class="subtitle">Ward-by-ward infrastructure health, preventive maintenance priorities, and municipal budget allocation</p>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Export Official Audit Report</button>
+                    </div>
+                </div>
+
+                <!-- City Overall Health Scorecard Hero -->
+                <div class="scorecard-hero">
+                    <div class="hero-rqi-gauge">
+                        <div class="rqi-circle">
+                            <span class="rqi-number">78.0</span>
+                            <span class="rqi-label">CITY RQI</span>
+                        </div>
+                        <div class="rqi-badge-status status-fair">GRADE B: FAIR CONDITION</div>
+                    </div>
+                    <div class="hero-stats-grid">
+                        <div class="h-stat">
+                            <span class="h-lbl">Total Road Network Scanned</span>
+                            <strong class="h-val">753.1 km</strong>
+                        </div>
+                        <div class="h-stat">
+                            <span class="h-lbl">Critical Repair Deficits</span>
+                            <strong class="h-val text-red">8 Priority Hazards</strong>
+                        </div>
+                        <div class="h-stat">
+                            <span class="h-lbl">Estimated Repair Budget</span>
+                            <strong class="h-val text-amber">₹ 2,45,000</strong>
+                        </div>
+                        <div class="h-stat">
+                            <span class="h-lbl">Citizen Safety Risk Reduction</span>
+                            <strong class="h-val text-emerald">-42.8% Est. Accidents</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ward-by-Ward Comparison Table -->
+                <div class="panel-card">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-city"></i> Zone-Wise Road Quality & Defect Breakdown</h3>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="stride-table" id="rqi-zones-table">
+                            <thead>
+                                <tr>
+                                    <th>Zone ID & Name</th>
+                                    <th>RQI Score</th>
+                                    <th>Pothole Count</th>
+                                    <th>Missing Infrastructure</th>
+                                    <th>Survey Coverage (km)</th>
+                                    <th>Maintenance Status</th>
+                                    <th>Priority Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="rqi-zones-tbody">
+                                <!-- Populated dynamically -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ================= MODALS & POPUPS ================= -->
+
+    <!-- Defect Visual Inspection & Work-Order Creation Modal -->
+    <div id="modal-defect-inspect" class="stride-modal-backdrop hidden">
+        <div class="stride-modal modal-lg">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-magnifying-glass-location"></i> Defect Inspection & Work-Order Dispatch</div>
+                <button class="modal-close" onclick="app.closeDefectModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="modal-defect-body">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Printable Work Order Dispatch Sheet Modal -->
+    <div id="modal-work-order-print" class="stride-modal-backdrop hidden">
+        <div class="stride-modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-print"></i> Municipal PWD Work-Order Dispatch Sheet</div>
+                <button class="modal-close" onclick="app.closeWorkOrderPrintModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="modal-wo-print-body">
+                <!-- Populated dynamically -->
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="app.closeWorkOrderPrintModal()">Close</button>
+                <button class="btn btn-primary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Dispatch Slip</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Incident ANPR Dossier Modal -->
+    <div id="modal-incident-inspect" class="stride-modal-backdrop hidden">
+        <div class="stride-modal modal-lg">
+            <div class="modal-header header-danger">
+                <div class="modal-title"><i class="fa-solid fa-shield-halved"></i> Law Enforcement Offender Dossier & ANPR Verification</div>
+                <button class="modal-close" onclick="app.closeIncidentModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body" id="modal-incident-body">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Simulation Trigger Modal -->
+    <div id="modal-simulation" class="stride-modal-backdrop hidden">
+        <div class="stride-modal modal-md">
+            <div class="modal-header">
+                <div class="modal-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Edge-AI Event Simulation Generator</div>
+                <button class="modal-close" onclick="app.closeSimulationModal()"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Target Bus Unit:</label>
+                    <select id="sim-modal-bus-select" class="stride-select">
+                        <!-- Populated dynamically -->
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Simulation Event Category:</label>
+                    <div class="sim-modal-category-grid">
+                        <button class="btn btn-sim-opt active" onclick="app.selectSimModalOpt(this, 'defect', 'pothole', 'Severe')">
+                            <i class="fa-solid fa-crater"></i> Pothole Crater
+                        </button>
+                        <button class="btn btn-sim-opt" onclick="app.selectSimModalOpt(this, 'defect', 'missing_divider', 'Critical')">
+                            <i class="fa-solid fa-road-barrier"></i> Broken Divider
+                        </button>
+                        <button class="btn btn-sim-opt" onclick="app.selectSimModalOpt(this, 'waterlogging', 'waterlogging', 'Critical')">
+                            <i class="fa-solid fa-water"></i> Waterlogging Flood
+                        </button>
+                        <button class="btn btn-sim-opt" onclick="app.selectSimModalOpt(this, 'pedestrian', 'School Children Crossing Zone', 'Critical')">
+                            <i class="fa-solid fa-children"></i> School Zone Crossing
+                        </button>
+                        <button class="btn btn-sim-opt" onclick="app.selectSimModalOpt(this, 'incident', 'Hit-and-Run Collision & Speeding Offender', 'Critical')">
+                            <i class="fa-solid fa-car-burst"></i> Hit-and-Run Crash
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline" onclick="app.closeSimulationModal()">Cancel</button>
+                    <button class="btn btn-primary" onclick="app.executeModalSimulation()"><i class="fa-solid fa-bolt"></i> Dispatch Simulated Event</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Audio Beep for Emergency Alarm -->
+    <audio id="audio-alarm" preload="none">
+        <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU9vT18AAAA=" type="audio/wav">
+    </audio>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Main Application JS -->
+    <script src="/static/app.js"></script>
+</body>
+</html>
